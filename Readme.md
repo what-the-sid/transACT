@@ -68,9 +68,10 @@ To deploy the API to AWS, simply run:
 
 ```bash
 make deploy
+```
 
 ## 📂 Project Structure
-
+```bash
 src
 ├── apps
 │   ├── user
@@ -91,3 +92,7 @@ src
 ├── middleware            # Shared middleware (Logger, Error handling)
 │
 └── store                 # Configuration stores (App config, Secrets)
+```
+
+## 🧪 API Collection.
+[Postman Collection](https://www.postman.com/demo-by-sid/test-demos/collection/kepvs4e/transact?action=share&creator=25655079)
