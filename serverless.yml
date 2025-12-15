@@ -1,0 +1,121 @@
+service: transact-api
+
+frameworkVersion: "4"
+
+build:
+  esbuild: false
+
+package:
+  patterns:
+    - dist/**
+    - "!src/**"
+
+custom:
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  tableName: TransactTable
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${self:custom.region}
+  stage: ${self:custom.stage}
+  deploymentBucket:
+    name: transact-serverless-deployments-us-east-1
+  httpApi:
+    name: "transact-api-${self:provider.stage}"
+    authorizers:
+      authorizeUser:
+        type: request
+        functionName: authorizeUser
+        enableSimpleResponses: true
+        identitySource:
+          - $request.header.Authorization
+
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    TABLE_NAME: ${self:custom.tableName}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:TransactWriteItems
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tableName}-${self:provider.region}-${self:provider.stage}
+
+functions:
+  createUser:
+    handler: dist/apps/user/handlers/createUser.handler
+    events:
+      - httpApi:
+          path: /users
+          method: post
+  loginUser:
+    handler: dist/apps/user/handlers/loginUser.handler
+    events:
+      - httpApi:
+          path: /login
+          method: post
+  authorizeUser:
+    handler: dist/apps/user/handlers/authorizeUser.handler
+
+  creditAmount:
+    handler: dist/apps/wallet/handlers/creditAmount.handler
+    events:
+      - httpApi:
+          path: /wallet/credit
+          method: post
+          authorizer:
+            name: authorizeUser
+
+  debitAmount:
+    handler: dist/apps/wallet/handlers/debitAmount.handler
+    events:
+      - httpApi:
+          path: /wallet/debit
+          method: post
+          authorizer:
+            name: authorizeUser
+
+  balanceAmount:
+    handler: dist/apps/wallet/handlers/balanceAmount.handler
+    events:
+      - httpApi:
+          path: /wallet/balance
+          method: get
+          authorizer:
+            name: authorizeUser
+
+resources:
+  Resources:
+    AuthorizerInvokePermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          Ref: AuthorizeUserLambdaFunction
+        Action: lambda:InvokeFunction
+        Principal: apigateway.amazonaws.com
+    TransactTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tableName}-${self:provider.region}-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
